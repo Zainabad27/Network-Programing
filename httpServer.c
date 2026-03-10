@@ -9,27 +9,40 @@ int main()
 
     if (Socketfd < 0)
     {
-        printf("Hello");
+        dprintf(2, "Socket did not get initialized at line number %i", (__LINE__ - 5));
     }
     else
     {
-        printf("hello from %s\nthe socket fd is: %i\n", "zain", Socketfd);
+        printf("Socket Got initialized with File descriptor %i", Socketfd);
     }
 
-    struct sockaddr *socketAddress;
     struct sockaddr_in *my_Addr;
     my_Addr->sin_family = AF_INET;
     my_Addr->sin_port = htons(2020);
-    my_Addr->sin_addr.s_addr = htons("192.168.1.253");
+    my_Addr->sin_addr.s_addr = htonl("192.168.1.253");
+
+    struct sockaddr_in *peer_Addr;
+
+    int Binded = bind(Socketfd, (struct sockaddr *)&my_Addr, sizeof(my_Addr));
+    if (Binded < 0)
     {
-        /* data */
-    };
 
-    socketAddress->sa_family = AF_INET;
-    // socketAddress->sa_data=buffer;
+        dprintf(2, "Socket did not get binded at line number %i", (__LINE__ - 3));
+    }
 
-    bind(Socketfd, (struct sockaddr *)&my_Addr, sizeof(my_Addr));
+    int startedlistening = listen(Socketfd, SOMAXCONN);
+
+    if (startedlistening < 0)
+    {
+        dprintf(2, "Socket did not started listening at line number %i", (__LINE__ - 4));
+    }
+
+    int connectedSocketfd = accept(Socketfd, (struct sockaddr*)&peer_Addr, sizeof(peer_Addr));
+    // have to check if connected socket got initialized
 
 
-    
+
+    connect(connectedSocketfd,(struct sockaddr*)&peer_Addr,sizeof(peer_Addr));
+
+ 
 }
