@@ -9,13 +9,12 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
-#define const BUFF_SIZE = 64
+#define  BUFF_SIZE 128
 
-int main()
+int main(void)
 {
-    char MainBuffer[128];
+    char MainBuffer[BUFF_SIZE];
 
-    char ipstr[INET6_ADDRSTRLEN];
     struct sockaddr_storage peerAddr;
     int peerAddrLength = sizeof(peerAddr);
 
@@ -51,13 +50,13 @@ int main()
 
     if (listen(MainSocketFd, 5) == -1)
     {
-        
+
         perror("Listening error");
         close(MainSocketFd);
         return 1;
     }
     fprintf(stdout, "Started Listening to the port 8080......\n");
-    
+
     int CurrentLyConnectedFd;
 
     CurrentLyConnectedFd = accept(MainSocketFd, (struct sockaddr *)&peerAddr, &peerAddrLength);
@@ -77,8 +76,10 @@ int main()
     if (BytesSend == -1)
         perror("error occured while sending the data to the connected socket.");
 
-    write(2,"Received Data Sent back.\n",strlen("Received Data Sent back.\n "));
+    write(2, "Received Data Sent back.\n", strlen("Received Data Sent back.\n "));
     shutdown(CurrentLyConnectedFd, SHUT_RDWR);
     shutdown(MainSocketFd, SHUT_RDWR);
+    close(CurrentLyConnectedFd);
+    close(MainSocketFd);
     return 0;
 }
