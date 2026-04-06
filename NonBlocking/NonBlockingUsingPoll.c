@@ -8,7 +8,20 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+struct BufferAndSize
+{
+    int Numbytes;
+    char *buf;
+};
+
 #define PORT 5002
+#define SWAP(type, a, b) \
+    do                   \
+    {                    \
+        type temp = a;   \
+        a = b;           \
+        b = temp;        \
+    } while (0)
 
 void *GetAddress(struct addrinfo *address)
 {
@@ -66,7 +79,7 @@ int GetASocket(void) // returns file descriptor. -1 incase of error
     return MainSocket;
 }
 
-void AddFileDescriptorToPollArray(struct pollfd **arr, int *totalPresentElements, int *ArraySize, int fd, int tobeMoniteredOrperation)
+void AddFileDescriptorToPollArray(struct pollfd **arr, int *totalPresentElements, int *ArraySize, int fd, short tobeMoniteredOrperation)
 {
     struct pollfd *temp;
     if (*totalPresentElements == *ArraySize)
@@ -86,9 +99,81 @@ void AddFileDescriptorToPollArray(struct pollfd **arr, int *totalPresentElements
     struct pollfd newMoniteredFd;
     newMoniteredFd.fd = fd;
     newMoniteredFd.events = tobeMoniteredOrperation;
+    newMoniteredFd.revents = 0;
 
     (*arr)[*totalPresentElements] = newMoniteredFd;
     (*totalPresentElements)++;
+}
+void DeleteFdFromPollFdArray(int position, int *arraysize, struct pollfd arr[])
+{
+    SWAP(struct pollfd, arr[(*arraysize) - 1], arr[position]);
+    (*arraysize)--;
+}
+void Handle_new_connection(struct pollfd arr[], int arraysize, int *totalFdInArray, int listener)
+{
+    struct sockaddr_storage peerAddr;
+    socklen_t peerAddrLen = sizeof(peerAddr);
+
+    int newSocket;
+    newSocket = accept(listener, (struct sockaddr *)&peerAddr, &peerAddrLen);
+
+    if (newSocket == -1)
+    {
+        perror("Couldn't accept the connection: ");
+        return;
+    }
+
+    AddFileDescriptorToPollArray(&arr, totalFdInArray, arraysize, newSocket, POLLIN);
+}
+
+struct BufferAndSize handle_Client_data(int listener, struct pollfd array[], int *arraysize, int fdi)
+{
+    struct BufferAndSize BuffAndSize;
+    int bufferLength = 256;
+    char buf[bufferLength];
+    memset(buf, 0, bufferLength);
+    if (array[fdi].revents & POLLIN)
+    {
+        int nbytes = recv(array[fdi].fd, buf, bufferLength, 0);
+        if (nbytes == -1)
+        {
+            fprintf(stderr, "Error while receiving the data from the socket: %d", array[fdi].fd);
+            perror("Error: ");
+        }
+        else
+        {
+            BuffAndSize.Numbytes = nbytes;
+            BuffAndSize.buf = buf;
+            close(array[fdi].fd);
+            DeleteFdFromPollFdArray(fdi, arraysize, array);
+        }
+    }
+
+    return BuffAndSize;
+}
+
+void SendDataToAllSockets(struct pollfd array[], int *arraysize, int listener, char *buffer, int buffersize, int sender)
+{
+    for (int i = 0; i < arraysize; i++)
+    {
+        if (array[i].fd != listener && array[i].fd != sender)
+        {
+            if (array[i].revents & POLLOUT)
+            {
+                int bytessend = send(array[i].fd, buffer, buffersize, 0);
+                if (bytessend == -1)
+                {
+                    fprintf(stderr, "error while sending the data to socket: %d", array[i].fd);
+                    perror("Error: ");
+                }
+                else
+                {
+                    close(array[i].fd);
+                    DeleteFdFromPollFdArray(i, arraysize, array);
+                }
+            }
+        }
+    }
 }
 
 int main()
@@ -108,8 +193,23 @@ int main()
         return EXIT_FAILURE;
     }
 
+    int activeevents = poll(array, totalElementsinArray, 5000);
+    if (activeevents == -1)
+    {
+        perror("Poll Error: ");
+        return EXIT_FAILURE;
+    }
 
-    poll(array,totalElementsinArray,5000);
+    while (pollfdArraySize > 0)
+    {
+        Handle_new_connection(array, pollfdArraySize, &totalElementsinArray, MainOpenedSocket);
+        for (int i = 0; i < pollfdArraySize; i++)
+        {
+            struct BufferAndSize buffAndSize = handle_Client_data(MainOpenedSocket, array, &pollfdArraySize, i);
+
+            SendDataToAllSockets(array, &pollfdArraySize, MainOpenedSocket, buffAndSize.buf, buffAndSize.Numbytes, array[i].fd);
+        }
+    }
 
     return 0;
 }
